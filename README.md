@@ -1,6 +1,4 @@
-[![](https://travis-ci.org/Lucas-C/pre-commit-hooks-java.svg?branch=master)](https://travis-ci.org/Lucas-C/pre-commit-hooks-java)
-
-Pre-commit hooks requiring a `java` interpreter in the `$PATH`.
+[![](https://travis-ci.org/pirogoeth/pre-commit-hooks-html.svg?branch=master)](https://travis-ci.org/pirogoeth/pre-commit-hooks-html)
 
 The `validate-html` hook uses the v.Nu validator: http://validator.w3.org/nu/.
 It can automagically replace mustaches by a default value in order to validate templates.
@@ -8,7 +6,7 @@ Currently, only [handlebars](http://handlebarsjs.com) templates are supported. P
 
 ## Usage
 ```
--   repo: https://github.com/Lucas-C/pre-commit-hooks-java
+-   repo: https://github.com/pirogoeth/pre-commit-hooks-html
     sha: v1.3.6
     hooks:
     -   id: validate-html
@@ -17,7 +15,7 @@ Currently, only [handlebars](http://handlebarsjs.com) templates are supported. P
 Advanced usage:
 
 ```
--   repo: https://github.com/Lucas-C/pre-commit-hooks-java
+-   repo: https://github.com/pirogoeth/pre-commit-hooks-html
     sha: v1.3.6
     hooks:
     -   id: validate-html
@@ -28,7 +26,7 @@ Advanced usage:
 With Jinja templates:
 
 ```
--   repo: https://github.com/Lucas-C/pre-commit-hooks-java
+-   repo: https://github.com/pirogoeth/pre-commit-hooks-html
     sha: v1.3.6
     hooks:
     -   id: validate-html

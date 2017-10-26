@@ -58,7 +58,7 @@ def test_validate_jinja2_errors(caplog):
     assert 'Element "head" is missing a required instance of child element "title"' in errors[1]
 
 
-def test_validate_handlebar_ko(tmpdir, caplog):
+def test_validate_handlebar_ok(tmpdir, caplog):
     html_file = tmpdir.join('test.hbs')
     html_file.write(HTML_WITH_HANDLEBAR_TITLE)
     assert validate_html([html_file.strpath]) == 1

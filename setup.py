@@ -3,9 +3,9 @@ from setuptools import setup
 
 setup(
     name='pre-commit-hooks',
-    description='Pre-commit hooks requiring a Java interpreter in the $PATH',
-    url='https://github.com/Lucas-C/pre-commit-hooks-java',
-    version='1.3.6',
+    description='Pre-commit hooks for validating HTML',
+    url='https://github.com/pirogoeth/pre-commit-hooks-html',
+    version='1.3.7',
 
     author='Lucas Cimon',
     author_email='lucas.cimon@gmail.com',

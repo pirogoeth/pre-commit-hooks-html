@@ -83,6 +83,7 @@ class CustomHTMLValidator(Validator):
         else:
             return Validator.validate(self, files, **kwargs)
 
+
 @contextlib.contextmanager
 def generate_mustachefree_tmpfiles(filepaths, mustache_remover, copy_ext, placeholder):
     mustachefree_tmpfiles = []
@@ -114,6 +115,7 @@ class PybarMustacheRemover:
         except PybarsError as error:
             raise_from(MustacheSubstitutionFail('For HTML template file {}: {}'.format(filepath, error)), error)
 
+
 class PybarPlaceholderContext:
     def __init__(self, placeholder):
         self.placeholder = placeholder
@@ -132,12 +134,14 @@ class Jinja2MustacheRemover:
         context = Jinja2PlaceholderContext(placeholder, env, DEFAULT_NAMESPACE.copy(), template.name, template.blocks)
         return concat(template.root_render_func(context))
 
+
 class Jinja2PlaceholderEnvironment(Environment):
     def __init__(self, placeholder, *args, **kwargs):
         Environment.__init__(self, *args, **kwargs)
         self.placeholder = placeholder
     def getattr(self, *_, **__):
         return RecursiveDefaultPlaceholder(self.placeholder.default_value)
+
 
 class Jinja2PlaceholderContext(Context):
     def __init__(self, placeholder, *args, **kwargs):
@@ -157,6 +161,8 @@ class RecursiveDefaultPlaceholder:
         self.default = default
     def __str__(self):
         return str(self.default)
+    def __repr__(self):
+        return self.__str__()
     def __getattribute__(self, name):
         if name == 'default' or name.startswith('__'):
             return object.__getattribute__(self, name)
