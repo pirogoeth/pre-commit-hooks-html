@@ -2,7 +2,17 @@
 
 from __future__ import print_function
 
-import argparse, contextlib, json, logging, os, shutil, sys
+import abc
+import argparse
+import contextlib
+import io
+import json
+import logging
+import os
+import re
+import shutil
+import sys
+
 from jinja2 import Environment, FileSystemLoader
 from jinja2.defaults import DEFAULT_NAMESPACE
 from jinja2.runtime import Context
@@ -12,26 +22,167 @@ from pybars import Compiler as PybarCompiler, PybarsError
 from html5validator.validator import Validator
 
 
+class HTMLSyntaxChecker(object, metaclass=abc.ABCMeta):
+
+    @classmethod
+    @abc.abstractmethod
+    def name(cls):
+
+        pass
+
+    @classmethod
+    @abc.abstractmethod
+    def check(cls, file):
+        
+        pass
+
+
+class UnquotedAttributesCheck(HTMLSyntaxChecker):
+    """ The only downside to this is that it is extremely "sensitive" / naive and will
+        pick up assignments in inline Javascript. :/
+    """
+    
+    _REGEX = re.compile(
+        r'''(?:(?P<key>[\w]+)\s?=\s?(?P<value>(?:(?:".+?")|(?:'.+?')|(?:\s*(?:[^\s>]+))))(?:\s*)?)+?''',
+        re.IGNORECASE | re.VERBOSE,
+    )
+    
+    @classmethod
+    def name(cls):
+        
+        return "unquoted_attributes"
+
+    @staticmethod
+    def is_quoted(value):
+        
+        if value[0] in ["'", '"'] and value[-1] in ["'", '"']:
+            return True
+
+        return False
+
+    @classmethod
+    def check(cls, file):
+        
+        log = logging.getLogger(cls.name())
+    
+        log.debug("checking file %s for unquoted attributes", file)
+
+        error_count = 0
+
+        with io.open(file, 'r') as datafile:
+            for line_no, line in enumerate(datafile.readlines(), start=1):
+                attributes = cls._REGEX.findall(line)
+                for key, value in attributes:
+                    if not cls.is_quoted(value):
+                        log.error(
+                            "unquoted attribute: file=%s line_no=%s attribute=%s value=%s",
+                            datafile.name,
+                            line_no,
+                            key,
+                            value,
+                        )
+                        error_count += 1
+
+        return error_count
+
+
+
+
+_SYNTAX_CHECK_CLASSES = [
+    UnquotedAttributesCheck,
+]
+
+
+def get_syntax_checker_names():
+    
+    return [cls.name() for cls in _SYNTAX_CHECK_CLASSES]
+
+
 def main(argv=None):
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('filenames', nargs='*', help='filenames to check')
-    parser.add_argument('--show-warnings', dest='error_only',
-                        action='store_false', default=True)
-    parser.add_argument('--ignore', action='append',
-                        help='ignore messages containing the given strings')
-    parser.add_argument('--ignore-re', action='append',
-                        help='regular expression of messages to ignore')
-    parser.add_argument('--remove-mustaches', action='store_true', default=False)
-    parser.add_argument('--mustache-remover', choices=('pybar', 'jinja2'), default='pybar')
-    parser.add_argument('--mustache-remover-env', action='append', nargs=2, help='Predefined KEY VALUE pair to substitute in the template')
-    parser.add_argument('--mustache-remover-copy-ext', default='~~')
-    parser.add_argument('--mustache-remover-default-value', default='DUMMY')
-    parser.add_argument('--templates-include-dir', help='Required for Jinja2 templates that use the `include` directive'
-                        ' - set it if you get a TemplateNotFound error')
-    parser.add_argument('--log', default='WARNING',
-                        help=('log level: DEBUG, INFO or WARNING '
-                              '(default: WARNING)'))
+    parser.add_argument(
+        'filenames',
+        nargs='*',
+        help='filenames to check',
+    )
+    parser.add_argument(
+        '--show-warnings',
+        dest='error_only',
+        action='store_false',
+        default=True,
+    )
+    parser.add_argument(
+        '--ignore',
+        action='append',
+        help='ignore messages containing the given strings',
+    )
+    parser.add_argument(
+        '--ignore-re',
+        action='append',
+        help='regular expression of messages to ignore',
+    )
+    parser.add_argument(
+        '-l',
+        action='store_const',
+        dest='stack_size',
+        const=2048,
+        help='run on larger files: sets Java stack size to 2048k',
+    )
+    parser.add_argument(
+        '-ll',
+        action='store_const',
+        dest='stack_size',
+        const=8192,
+        help='run on larger files: sets Java stack size to 8192k',
+    )
+    parser.add_argument(
+        '-lll',
+        action='store_const',
+        dest='stack_size',
+        const=32768,
+        help='run on larger files: sets Java stack size to 32768k',
+    )
+    parser.add_argument(
+        '--remove-mustaches',
+        action='store_true',
+        default=False,
+    )
+    parser.add_argument(
+        '--mustache-remover',
+        choices=('pybar', 'jinja2'),
+        default='pybar',
+    )
+    parser.add_argument(
+        '--mustache-remover-env',
+        action='append',
+        nargs=2,
+        help='Predefined KEY VALUE pair to substitute in the template',
+    )
+    parser.add_argument(
+        '--mustache-remover-copy-ext',
+        default='~~',
+    )
+    parser.add_argument(
+        '--mustache-remover-default-value',
+        default='DUMMY',
+    )
+    parser.add_argument(
+        '--templates-include-dir',
+        help='Required for Jinja2 templates that use the `include` directive'
+            ' - set it if you get a TemplateNotFound error',
+    )
+    parser.add_argument(
+        '--log',
+        default='WARNING',
+        help='log level: DEBUG, INFO or WARNING (default: WARNING)',
+    )
+    parser.add_argument(
+        '--syntax-check',
+        action='append',
+        dest='syntax_checks',
+        choices=get_syntax_checker_names(),
+    )
     args = parser.parse_args(argv)
 
     if not args.filenames:
@@ -40,17 +191,42 @@ def main(argv=None):
     logging.basicConfig(level=getattr(logging, args.log))
 
     placeholder = Placeholder(args.mustache_remover_default_value, args.mustache_remover_env)
-    validator = CustomHTMLValidator(mustache_remover_name=args.mustache_remover,
-                                    mustache_remover_copy_ext=args.mustache_remover_copy_ext,
-                                    mustache_remover_placeholder=placeholder,
-                                    templates_include_dir=args.templates_include_dir,
-                                    directory=None, match=None, ignore=args.ignore, ignore_re=args.ignore_re)
+    validation_args = {
+        'mustache_remover_name': args.mustache_remover,
+        'mustache_remover_copy_ext': args.mustache_remover_copy_ext,
+        'mustache_remover_placeholder': placeholder,
+        'templates_include_dir': args.templates_include_dir,
+    }
 
-    return validator.validate(
+    error_count = 0
+
+    # Validation with validator.nu first
+    validator = CustomHTMLValidator(
+        directory=None,
+        match=None,
+        ignore=args.ignore,
+        ignore_re=args.ignore_re,
+        **validation_args
+    )
+    error_count += validator.validate(
         args.filenames,
         errors_only=args.error_only,
+        stack_size=args.stack_size,
         remove_mustaches=args.remove_mustaches,
     )
+
+    # Validate with syntax checkers if any are set
+    if args.syntax_checks:
+        validator = HTMLSyntaxValidator(
+            syntax_checks=args.syntax_checks,
+            **validation_args
+        )
+        error_count += validator.validate(
+            args.filenames,
+            remove_mustaches=args.remove_mustaches,
+        )
+
+    return error_count
 
 
 class Placeholder:
@@ -62,29 +238,80 @@ class Placeholder:
         self.env = {k: eval(v) for k, v in env or ()}
 
 
+class ValidatorBase(Validator, metaclass=abc.ABCMeta):
 
-class CustomHTMLValidator(Validator):
+    def __init__(self, mustache_remover_name, mustache_remover_copy_ext, mustache_remover_placeholder, templates_include_dir, *args, **kw):
 
-    def __init__(self, mustache_remover_name, mustache_remover_copy_ext, mustache_remover_placeholder, templates_include_dir, *args, **kwargs):
-
-        Validator.__init__(self, *args, **kwargs)
+        self.mustache_remover = Jinja2MustacheRemover(templates_include_dir) if mustache_remover_name == 'jinja2' else PybarMustacheRemover()
         self.mustache_remover_copy_ext = mustache_remover_copy_ext
         self.mustache_remover_placeholder = mustache_remover_placeholder
-        self.mustache_remover = Jinja2MustacheRemover(templates_include_dir) if mustache_remover_name == 'jinja2' else PybarMustacheRemover()
 
-    def validate(self, files=None, remove_mustaches=False, **kwargs):
+        self.log = logging.getLogger(self.__class__.__name__)
+
+        Validator.__init__(self, *args, **kw)
+
+    @contextlib.contextmanager
+    def _remove_mustaches(self, files=None):
+
+        if not files:
+            files = self.all_files()
+
+        with generate_mustachefree_tmpfiles(files,
+                                            self.mustache_remover,
+                                            copy_ext=self.mustache_remover_copy_ext,
+                                            placeholder=self.mustache_remover_placeholder) as tmpfiles:
+            yield tmpfiles
+
+    def validate(self, files=None, remove_mustaches=False, **kw):
 
         if not files:
             files = self.all_files()
 
         if remove_mustaches:
-            with generate_mustachefree_tmpfiles(files,
-                                                self.mustache_remover,
-                                                copy_ext=self.mustache_remover_copy_ext,
-                                                placeholder=self.mustache_remover_placeholder) as tmpfiles:
-                return Validator.validate(self, tmpfiles, **kwargs)
+            with self._remove_mustaches(files) as tmpfiles:
+                return self._validate(tmpfiles, **kw)
         else:
-            return Validator.validate(self, files, **kwargs)
+            return self._validate(files, **kw)
+
+    @abc.abstractmethod
+    def _validate(self, files, **kw):
+
+        pass
+
+
+class CustomHTMLValidator(ValidatorBase):
+
+    def __init__(self, *args, **kw):
+
+        ValidatorBase.__init__(self, *args, **kw)
+
+    def _validate(self, files, **kw):
+
+        return Validator.validate(self, files, **kw)
+
+
+class HTMLSyntaxValidator(ValidatorBase):
+    
+    def __init__(self, syntax_checks, *args, **kw):
+
+        ValidatorBase.__init__(self, *args, **kw)
+        self.checks = [cls for cls in _SYNTAX_CHECK_CLASSES if cls.name() in syntax_checks]
+
+    def _validate(self, files, **kw):
+        
+        return self.run_checks(files, **kw)
+
+    def run_checks(self, files, **kw):
+        
+        error_count = 0
+
+        for filename in files:
+            self.log.debug('running syntax checks on file: %s', filename)
+            for checker in self.checks:
+                self.log.debug('running check %s on file: %s', checker.name(), filename)
+                error_count += checker.check(filename)
+
+        return error_count
 
 
 @contextlib.contextmanager
