@@ -33,7 +33,7 @@ class HTMLSyntaxChecker(object, metaclass=abc.ABCMeta):
     @classmethod
     @abc.abstractmethod
     def check(cls, file):
-        
+
         pass
 
 
@@ -41,20 +41,20 @@ class UnquotedAttributesCheck(HTMLSyntaxChecker):
     """ The only downside to this is that it is extremely "sensitive" / naive and will
         pick up assignments in inline Javascript. :/
     """
-    
+
     _REGEX = re.compile(
         r'''(?:(?P<key>[\w]+)\s?=\s?(?P<value>(?:(?:".+?")|(?:'.+?')|(?:\s*(?:[^\s>]+))))(?:\s*)?)+?''',
         re.IGNORECASE | re.VERBOSE,
     )
-    
+
     @classmethod
     def name(cls):
-        
+
         return "unquoted_attributes"
 
     @staticmethod
     def is_quoted(value):
-        
+
         if value[0] in ["'", '"'] and value[-1] in ["'", '"']:
             return True
 
@@ -62,9 +62,9 @@ class UnquotedAttributesCheck(HTMLSyntaxChecker):
 
     @classmethod
     def check(cls, file):
-        
+
         log = logging.getLogger(cls.name())
-    
+
         log.debug("checking file %s for unquoted attributes", file)
 
         error_count = 0
@@ -86,15 +86,13 @@ class UnquotedAttributesCheck(HTMLSyntaxChecker):
         return error_count
 
 
-
-
 _SYNTAX_CHECK_CLASSES = [
     UnquotedAttributesCheck,
 ]
 
 
 def get_syntax_checker_names():
-    
+
     return [cls.name() for cls in _SYNTAX_CHECK_CLASSES]
 
 
@@ -183,6 +181,12 @@ def main(argv=None):
         dest='syntax_checks',
         choices=get_syntax_checker_names(),
     )
+    parser.add_argument(
+        '--syntax-check-ignore-pattern',
+        action='append',
+        dest='syntax_check_ignore_patterns',
+        help='Regex pattern(s) of filenames to ignore',
+    )
     args = parser.parse_args(argv)
 
     if not args.filenames:
@@ -219,6 +223,7 @@ def main(argv=None):
     if args.syntax_checks:
         validator = HTMLSyntaxValidator(
             syntax_checks=args.syntax_checks,
+            ignore_patterns=args.syntax_check_ignore_patterns,
             **validation_args
         )
         error_count += validator.validate(
@@ -291,21 +296,33 @@ class CustomHTMLValidator(ValidatorBase):
 
 
 class HTMLSyntaxValidator(ValidatorBase):
-    
-    def __init__(self, syntax_checks, *args, **kw):
+
+    def __init__(self, syntax_checks, ignore_patterns, *args, **kw):
 
         ValidatorBase.__init__(self, *args, **kw)
         self.checks = [cls for cls in _SYNTAX_CHECK_CLASSES if cls.name() in syntax_checks]
+        self.ignore_patterns = [re.compile(pattern) for pattern in ignore_patterns]
 
     def _validate(self, files, **kw):
-        
+
         return self.run_checks(files, **kw)
 
     def run_checks(self, files, **kw):
-        
+
         error_count = 0
 
         for filename in files:
+            ignore = False
+            for pattern in self.ignore_patterns:
+                self.log.debug('checking pattern %s against filename %s', pattern, filename)
+                if pattern.search(filename):
+                    ignore = True
+                    break
+
+            if ignore:
+                self.log.info('skipping file (ignored by pattern: %s): %s', pattern, filename)
+                continue
+
             self.log.debug('running syntax checks on file: %s', filename)
             for checker in self.checks:
                 self.log.debug('running check %s on file: %s', checker.name(), filename)
