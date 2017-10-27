@@ -307,6 +307,11 @@ class HTMLSyntaxValidator(ValidatorBase):
         self.checks = [cls for cls in _SYNTAX_CHECK_CLASSES if cls.name() in syntax_checks]
         self.ignore_patterns = [re.compile(pattern) for pattern in ignore_patterns]
 
+        self.log.debug(
+            'Syntax validator has ignore patterns: %s',
+            [pattern.pattern for pattern in self.ignore_patterns],
+        )
+
     def _validate(self, files, **kw):
 
         return self.run_checks(files, **kw)
@@ -318,13 +323,13 @@ class HTMLSyntaxValidator(ValidatorBase):
         for filename in files:
             ignore = False
             for pattern in self.ignore_patterns:
-                self.log.debug('checking pattern %s against filename %s', pattern, filename)
+                self.log.debug('checking pattern %s against filename %s', pattern.pattern, filename)
                 if pattern.search(filename):
                     ignore = True
                     break
 
             if ignore:
-                self.log.info('skipping file (ignored by pattern: %s): %s', pattern, filename)
+                self.log.info('skipping file (ignored by pattern: %s): %s', pattern.pattern, filename)
                 continue
 
             self.log.debug('running syntax checks on file: %s', filename)

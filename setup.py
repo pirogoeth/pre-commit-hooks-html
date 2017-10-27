@@ -5,7 +5,7 @@ setup(
     name='pre-commit-hooks',
     description='Pre-commit hooks for validating HTML',
     url='https://github.com/pirogoeth/pre-commit-hooks-html',
-    version='1.3.11',
+    version='1.3.12',
 
     author='Lucas Cimon',
     author_email='lucas.cimon@gmail.com',
