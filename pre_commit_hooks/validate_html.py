@@ -22,7 +22,9 @@ from pybars import Compiler as PybarCompiler, PybarsError
 from html5validator.validator import Validator
 
 
-class HTMLSyntaxChecker(object, metaclass=abc.ABCMeta):
+class HTMLSyntaxChecker(object):
+
+    __metaclass__ = abc.ABCMeta
 
     @classmethod
     @abc.abstractmethod
@@ -243,7 +245,9 @@ class Placeholder:
         self.env = {k: eval(v) for k, v in env or ()}
 
 
-class ValidatorBase(Validator, metaclass=abc.ABCMeta):
+class ValidatorBase(Validator):
+
+    __metaclass__ = abc.ABCMeta
 
     def __init__(self, mustache_remover_name, mustache_remover_copy_ext, mustache_remover_placeholder, templates_include_dir, *args, **kw):
 
